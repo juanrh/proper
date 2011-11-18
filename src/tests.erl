@@ -12,7 +12,11 @@
 %%
   % para PropEr
 %-include_lib("proper/include/proper.hrl").
+% -spec not_specced(any(), any(), any(), any()) -> any().  
+not_specced(X, Y, hola, {a, b}) -> {a, Y, X} .
 
+-spec f() -> integer() .
+f() -> 0 .
 
 % Testear una spec  
 % proper:check_spec({proper_tests,g,1}) .
@@ -139,3 +143,53 @@ h2(X, _Y, _Z) -> X .
 % 28> io:fwrite("~p~n", [lists:map(fun(Size) -> element(2, proper_gen:pick(proper:create_spec_args_types({tests, h,2}), Size)) end, lists:seq(1, 100))]) .
 % esto en cambio ya tarda unos cuantos segundos: se puede optimizar pq usar pick es muy rupestre
 % 37> io:fwrite("~p~n", [lists:map(fun(Size) -> element(2, proper_gen:pick(proper:create_spec_args_types({tests, append,1}), Size)) end, lists:seq(1, 100))]) .
+
+% [{mfa(), [proper_types:type()]}] 
+%  proper:create_specs_args_types(tests) .
+test_cover_1() ->
+	MfaArgsTypesList = proper:create_specs_args_types(tests),
+    % TenTests = fun({{Mod, Fun, _Ar}, ArgsTypes}) -> apply(Mod, Fun, element(2, proper_gen:pick(ArgsTypes, 10))) end,
+	TenTests = fun({{Mod, Fun, Ar}, ArgsTypes}) -> 
+					R =  try apply(Mod, Fun, element(2, proper_gen:pick(ArgsTypes, 10))) 
+							catch _:_ -> {error, overapproximation_failure}
+						  end,
+					{{Mod, Fun, Ar}, R}  
+			end,
+    Res = lists:map(TenTests, MfaArgsTypesList),
+	io:fwrite("~p~n", [Res]) .
+
+% 100> tests:test_cover_1() .
+% [{{tests,g,1},{error,overapproximation_failure}},
+%  {{tests,append,2},
+%   [{},
+%    {êl,{[]},{},9.8657602919318,'à\215'},
+%    [{},1,{{},['\214¸\211µ\220\217C¹î'],'ùsgá÷'}],
+%    [[],'¥',{},-2,{}],
+%    [{},'¹/Á\017½','Û\035\231«Òyïİ®',14,
+%     {[]},
+%     8.464066795647838,
+%     {{}},
+%     'Lc¦',
+%     [{<<>>}]],
+%    ')î','(8',
+%    ['','','åæØE-äôü','\\',-15.755949901910856,'¤iÉxÂ','F^\d',
+%     19.58131130624219,-6],
+%    <<89,206,15,85,227,28,59,190,30:5>>,
+%    {},
+%    {-9.137341185741786,4.082754273972165,
+%     [0.7591829003611885,'','K',{}],
+%     <<83,150,8:5>>,
+%     -19.20384746271314,'a6\003q\235\006\023y'},
+%    [[-12.405661103768992,[{}],-0.15766764273059652,'ã\223ÕiÄ\tò'],
+%     [{}],
+%     -13.3653956363964],
+%    <<34,2,223,8:4>>,
+%    [13,6,'&0­ÊñşW','Îô"','è\231=«ôÈ',2,ú],
+%    <<"X">>]},
+%  {{tests,f,0},0},
+%  {{tests,h,2},{bad,"malamente"}},
+%  {{tests,g2,1},1},
+%  {{tests,g3,1},0},
+%  {{tests,h2,3},{-10,[]}},
+%  {{tests,append,1},{error,overapproximation_failure}}]
+% ok
