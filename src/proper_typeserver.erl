@@ -171,6 +171,72 @@
 
 -include("proper_internal.hrl").
 
+% JUAN:
+-export([create_spec_args_types/1]) .
+-spec create_spec_args_types(mfa()) -> [proper_types:type()] .
+create_spec_args_types(MFA) -> 
+	% just pass the call to proper_typeserver in order to hace access to 
+	% its state, which is needed in the translation process from native
+	% to PropEr types
+    TypeserverPid = get('$typeserver_pid'),
+	% TODO: error handling
+    {ok,ArgTypes} = gen_server:call(TypeserverPid, {create_spec_args_types,MFA}),
+	% io:fwrite("ArgsTypes = < ~p >~n~n", [ArgTypes]),
+	ArgTypes .
+
+-spec create_spec_args_types(mfa(), state()) ->
+	{ok, [proper_types:type()], state()} | {error, term()} .
+create_spec_args_types(MFA, State) -> 
+	% TODO: error handling
+ 	{ok,FunRepr,NewState} = get_exp_spec(MFA, State),
+	{Mod,_Fun,_Arity} = MFA, {Domain,_Range} = FunRepr,
+	% TODO: error handling
+	{ok,ArgTypes,NewState2} = convert(Mod, {type,0,'$fixed_list',Domain}, NewState),
+	{ok,ArgTypes,NewState2} .
+
+% JUAN: TODO borrar
+% create_spec_test(MFA, SpecTimeout, State) ->
+%     case get_exp_spec(MFA, State) of
+% 	{ok,FunRepr,NewState} ->
+% 	    make_spec_test(MFA, FunRepr, SpecTimeout, NewState);
+% 	{error,_Reason} = Error ->
+% 	    Error
+%     end.
+
+% -spec get_exp_spec(mfa(), state()) -> rich_result2(fun_repr(),state()).
+% get_exp_spec({Mod,Fun,Arity} = MFA, State) ->
+%     case add_module(Mod, State) of
+% 	{ok,#state{exp_specs = ExpSpecs} = NewState} ->
+% 	    ModExpSpecs = dict:fetch(Mod, ExpSpecs),
+% 	    case dict:find({Fun,Arity}, ModExpSpecs) of
+% 		{ok,FunRepr} ->
+% 		    {ok, FunRepr, NewState};
+% 		error ->
+% 		    {error, {function_not_exported_or_specced,MFA}}
+% 	    end;
+% 	{error,_Reason} = Error ->
+% 	    Error
+%     end.
+
+% -spec make_spec_test(mfa(), fun_repr(), timeout(), state()) ->
+% 	  rich_result2(proper:test(),state()).
+% make_spec_test({Mod,Fun,_Arity}, {Domain,Range}, SpecTimeout, State) ->
+%     case convert(Mod, {type,0,'$fixed_list',Domain}, State) of
+% 	{ok,FinType,NewState} ->
+% 	    %% TODO: We just catch all exceptions, plus error:badarg.
+% 	    Test = ?FORALL(Args, FinType, ?TIMEOUT(SpecTimeout,
+% 			try apply(Mod,Fun,Args) of
+% 			    X -> ?MODULE:is_instance(X,Mod,Range)
+% 			catch
+% 			    throw:_      -> true;
+% 			    error:badarg -> true
+% 			end)),
+% 	    {ok, Test, NewState};
+% 	{error,_Reason} = Error ->
+% 	    Error
+%     end.
+
+
 
 %%------------------------------------------------------------------------------
 %% Macros
@@ -420,7 +486,18 @@ handle_call({translate_type,ImmType}, _From, State) ->
 	    {reply, {ok,FinType}, NewState};
 	{error,_Reason} = Error ->
 	    {reply, Error, State}
-    end.
+    end; %. JUAN
+% JUAN
+handle_call({create_spec_args_types,MFA}, _From, State) ->
+	% just pass the call to create_spec_args_types/2 and process the reply
+	% on success the state is updated, otherwise it remains untouched
+	% the return value of the call is always returned
+    case create_spec_args_types(MFA, State) of
+	{ok,ArgTypes,NewState} ->
+	    {reply, {ok,ArgTypes}, NewState};
+	{error,_Reason} = Error ->
+	    {reply, Error, State}
+    end .
 
 %% @private
 -spec handle_cast('stop', state()) -> {'stop','normal',state()}.

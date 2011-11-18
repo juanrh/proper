@@ -347,10 +347,58 @@
 -export([pure_check/1, pure_check/2]).
 -export([forall/2, implies/2, whenfail/2, trapexit/1, timeout/2]).
 
+% FIXME JUAN: tests 
+% -export([j_test/0]) .
+-export([j_spec_test_case/1, create_spec_args_types/1]) .
+
 -export_type([test/0, outer_test/0, counterexample/0, exception/0]).
 
--include("proper_internal.hrl").
+% FIXME JUAN: tests
+% 3> proper:j_test() .
+% -spec j_test() -> {'ok',imm_instance()} | {'error',error_reason()}.
+% j_test() ->
+%	% proper_gen:safe_generate(proper_types:list()) .
+%	global_state_init(parse_opts([])),
+%    % Result = inner_test(RawTest, Opts),
+%	Result = proper_gen:safe_generate(proper_types:list()), 
+%    global_state_erase(),
+%    Result.
+%	% arriba KK, esto de abajo es lo que va bien: las funciones
+% 	pick/1, pick/2, sample/1 y sample/3 de proper_gen son lo q necesito!
+%	proper_gen:pick(proper_types:list(proper_types:int())) .
+%
+% -spec check_spec(mfa()) -> result().
+% -spec cook_test(raw_test(), opts()) -> test().
+% cd git/eclipse/proper/ebin/
+% ej uso: proper:j_spec_test_case({tests,g,1}) 
+-spec j_spec_test_case(mfa()) -> test() .
+% TODO: lo q sea que haga probarlo con una spec con where como la de mylists
+j_spec_test_case(MFA) ->
+	Opts = parse_opts([]) , 
+ 	global_state_init(Opts),
+	RawTest = {spec,MFA},
+	Test = cook_test(RawTest, Opts) , 
+	global_state_erase(),
+	Test .
 
+% JUAN: mas desarrollado
+-spec create_spec_args_types(mfa()) -> [proper_types:type()] .
+ create_spec_args_types(MFA) ->
+ 	% TODO: option support
+ 	Opts = parse_opts([]) , 
+	% initialize state variables in process dictionary ('$size', '$left', etc..);
+	% initialize random number generator; start proper_typeserver
+  	global_state_init(Opts),
+	% lookup specs and synthesize proper types for the arguments
+	% FIXME: currently only the first clause of a many clause spec is processed,
+	% this will need more deep modifications in module proper_typeserver
+	ArgsTypes = proper_typeserver:create_spec_args_types(MFA) ,
+	% delete state variables in process dictionary; 
+	% erase random number generator seed, stop proper_typeserver
+ 	global_state_erase(),
+	ArgsTypes.	
+
+-include("proper_internal.hrl").
 
 %%-----------------------------------------------------------------------------
 %% Macros
@@ -587,6 +635,8 @@ get_size(Type) ->
 global_state_init_size(Size) ->
     global_state_init(#opts{start_size = Size}).
 
+% JUAN: entre otras cosas parece inicializar el motor de numeros aleatorios 
+% y el typeserver
 -spec global_state_init(opts()) -> 'ok'.
 global_state_init(#opts{start_size = StartSize, constraint_tries = CTries,
 			any_type = AnyType} = Opts) ->
@@ -970,6 +1020,9 @@ equals(A, B) ->
 %% Bulk testing functions
 %%-----------------------------------------------------------------------------
 
+% JUAN: llamado como test({test,Test}, Opts) en proper:quickchek/2
+% corresponde al type de arriba: 
+%	-type raw_test() :: {'test',test()} | {'spec',mfa()}.
 -spec test(raw_test(), opts()) -> result().
 test(RawTest, Opts) ->
     global_state_init(Opts),
@@ -980,8 +1033,8 @@ test(RawTest, Opts) ->
 -spec inner_test(raw_test(), opts()) -> result().
 inner_test(RawTest, #opts{numtests = NumTests, long_result = ReturnLong,
 			  output_fun = Print} = Opts) ->
-    Test = cook_test(RawTest, Opts),
-    ImmResult = perform(NumTests, Test, Opts),
+    Test = cook_test(RawTest, Opts), % JUAN: solo hace algo para los tests de specs
+    ImmResult = perform(NumTests, Test, Opts), % JUAN: la chicha
     Print("~n", []),
     report_imm_result(ImmResult, Opts),
     {ShortResult,LongResult} = get_result(ImmResult, Test, Opts),
@@ -1008,7 +1061,7 @@ multi_test(Mod, RawTestKind,
 	    test -> {ok, [{Mod,Name,0} || {Name,0} <- Mod:module_info(exports),
 					  lists:prefix(?PROPERTY_PREFIX,
 						       atom_to_list(Name))]};
-	    spec -> proper_typeserver:get_exp_specced(Mod)
+	    spec -> proper_typeserver:get_exp_specced(Mod)	% JUAN: aqui parece que empieza el check_specs de verdad
 	end,
     {ShortResult, LongResult} =
 	case MaybeMFAs of
@@ -1055,7 +1108,9 @@ cook_test({spec,MFA}, #opts{spec_timeout = SpecTimeout}) ->
 	{ok,Test} ->
 	    Test;
 	{error,Reason}  ->
-	    ?FORALL(_, dummy, throw({'$typeserver',Reason}))
+		% JUAN: una forma bien rara de parar el proceso, pero desde luego
+		% q es una propiedad q devolvera una excepcion
+	    ?FORALL(_, dummy, throw({'$typeserver',Reason}))  
     end.
 
 -spec get_result(imm_result(),test(),opts()) -> {short_result(),long_result()}.
@@ -1082,6 +1137,10 @@ get_rerun_result(#fail{}) ->
 get_rerun_result({error,_Reason} = ErrorResult) ->
     ErrorResult.
 
+% JUAN: esto es la chica, descrito en "3.2.1 PropEr Workflow" del trabajo
+% de Manolis, pag 32
+% llamado desde proper:inner_test/2, que a su vez es llamado desde proper:test/2
+% como perform(NumTests, Test, Opts)
 -spec perform(non_neg_integer(), test(), opts()) -> imm_result().
 perform(NumTests, Test, Opts) ->
     perform(0, NumTests, ?MAX_TRIES_FACTOR * NumTests, Test, none, none, Opts).
@@ -1089,19 +1148,22 @@ perform(NumTests, Test, Opts) ->
 -spec perform(non_neg_integer(), non_neg_integer(), non_neg_integer(), test(),
 	      [sample()] | 'none', [stats_printer()] | 'none', opts()) ->
 	  imm_result().
+	% se ha agotado el numero de intentos
 perform(Passed, _ToPass, 0, _Test, Samples, Printers, _Opts) ->
     case Passed of
 	0 -> {error, cant_satisfy};
 	_ -> #pass{samples = Samples, printers = Printers, performed = Passed}
     end;
+	% ya se han pasado todos los tests: truco lado izdo no lineal
 perform(ToPass, ToPass, _TriesLeft, _Test, Samples, Printers, _Opts) ->
     #pass{samples = Samples, printers = Printers, performed = ToPass};
+	% caso recursivo interesante: un paso de ejecutar un test
 perform(Passed, ToPass, TriesLeft, Test, Samples, Printers,
 	#opts{output_fun = Print} = Opts) ->
-    case run(Test) of
+    case run(Test) of	% JUAN: CHICHA de generar input y ejecutar
 	#pass{reason = true_prop, samples = MoreSamples,
 	      printers = MorePrinters} ->
-	    Print(".", []),
+	    Print(".", []), % JUAN: escribe que un test ha sido exitoso
 	    NewSamples = add_samples(MoreSamples, Samples),
 	    NewPrinters = case Printers of
 			      none -> MorePrinters;
@@ -1111,10 +1173,10 @@ perform(Passed, ToPass, TriesLeft, Test, Samples, Printers,
 	    perform(Passed + 1, ToPass, TriesLeft - 1, Test,
 		    NewSamples, NewPrinters, Opts);
 	#fail{} = FailResult ->
-	    Print("!", []),
+	    Print("!", []), % JUAN: escribe que un test ha fallado
 	    FailResult#fail{performed = Passed + 1};
 	{error, rejected} ->
-	    Print("x", []),
+	    Print("x", []), % JUAN: escribe que un test no ha pasado la precondicion de un ?IMPLIES
 	    grow_size(Opts),
 	    perform(Passed, ToPass, TriesLeft - 1, Test,
 		    Samples, Printers, Opts);
@@ -1140,6 +1202,7 @@ add_samples(MoreSamples, Samples) ->
 %% Single test runner functions
 %%-----------------------------------------------------------------------------
 
+% JUAN: chicha de generar input y ejecutar
 -spec run(test()) -> run_result().
 run(Test) ->
     run(Test, #ctx{}).
@@ -1151,6 +1214,7 @@ rerun(Test, IsImm, ToTry) ->
     run(Test, Ctx).
 
 -spec run(test(), ctx()) -> run_result().
+% JUAN: aqui hace una distincion de casos sobre los elementos del tipo proper:test()
 run(Result, #ctx{mode = Mode, bound = Bound} = Ctx) when is_boolean(Result) ->
     case Mode =:= new orelse Bound =:= [] of
 	true ->
