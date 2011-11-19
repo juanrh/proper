@@ -193,3 +193,5 @@ test_cover_1() ->
 %  {{tests,h2,3},{-10,[]}},
 %  {{tests,append,1},{error,overapproximation_failure}}]
 % ok
+
+% proper_cover:create_cover_tests(tests) .
