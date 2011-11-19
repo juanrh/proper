@@ -159,6 +159,8 @@
 	 parameter/1, parameter/2]).
 -export([le/2]).
 
+-export([create_spec_args_types/1, create_specs_args_types/1]) .
+
 -export_type([type/0, raw_type/0, extint/0, extnum/0]).
 
 -include("proper_internal.hrl").
@@ -1216,3 +1218,38 @@ parameter(Parameter, Default) ->
 -spec parameter(atom()) -> value().
 parameter(Parameter) ->
     parameter(Parameter, undefined).
+
+%%-----------------------------------------------------------------------------
+%% Test coverage generation 
+%%-----------------------------------------------------------------------------
+% TODO: maybe it would be better to have just proper:create_spec_args_types/1 with 
+%-spec create_spec_args_types({function, mfa()} | {module, atom()}) 
+%	-> [proper_types:type()] | [{mfa(), [proper_types:type()]}] . 
+% instead of two functions, but let us leave that details for latter
+-spec create_spec_args_types(mfa()) -> [proper_types:type()] .
+ create_spec_args_types(MFA) ->
+	% initialize random number generator; start proper_typeserver
+	proper_arith:rand_start(), proper_typeserver:start(),
+	% lookup specs for MFA and synthesize proper types for the arguments
+	% FIXME: currently only the first clause of a many clause spec is processed,
+	% this will need more deep modifications in module proper_typeserverç
+	% TODO: error handling
+	ArgsTypes = proper_typeserver:create_spec_args_types(MFA) ,
+	% erase random number generator seed, stop proper_typeserver
+	proper_typeserver:stop(), proper_arith:rand_stop(),
+	ArgsTypes.	
+
+-spec create_specs_args_types(Module :: atom()) -> [{mfa(), [proper_types:type()]}] .
+create_specs_args_types(Module) -> 
+	% initialize random number generator; start proper_typeserver
+	proper_arith:rand_start(), proper_typeserver:start(),
+	% lookup specs for all the spec'ed functions in Module, and synthesize proper types for the arguments
+	% FIXME: currently only the first clause of a many clause spec is processed,
+	% this will need more deep modifications in module proper_typeserver
+	% TODO: error handling
+	{ok, MFAs} = proper_typeserver:get_exp_specced(Module),
+	% TODO: error handling
+	MfaArgsTypesList = [{MFA, proper_typeserver:create_spec_args_types(MFA)} || MFA <- MFAs], 
+	% erase random number generator seed, stop proper_typeserver
+	proper_typeserver:stop(), proper_arith:rand_stop(),
+	MfaArgsTypesList .

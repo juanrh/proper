@@ -347,8 +347,6 @@
 -export([pure_check/1, pure_check/2]).
 -export([forall/2, implies/2, whenfail/2, trapexit/1, timeout/2]).
 
--export([create_spec_args_types/1, create_specs_args_types/1]) .
-
 -export_type([test/0, outer_test/0, counterexample/0, exception/0]).
 
 -include("proper_internal.hrl").
@@ -1850,49 +1848,3 @@ avg_and_last([Last], Sum, Len) ->
     {(Sum + Last) / (Len + 1), Last};
 avg_and_last([X | Rest], Sum, Len) ->
     avg_and_last(Rest, Sum + X, Len + 1).
-
-%%-----------------------------------------------------------------------------
-%% Test coverage generation 
-%%-----------------------------------------------------------------------------
-% TODO: maybe it would be better to have just proper:create_spec_args_types/1 with 
-%-spec create_spec_args_types({function, mfa()} | {module, atom()}) 
-%	-> [proper_types:type()] | [{mfa(), [proper_types:type()]}] . 
-% instead of two functions, but let us leave that details for latter
-% TODO: refactor ==> it would be nice that the generation of specs for one function and 
-% all the functions in a module would share as code as possible
--spec create_spec_args_types(mfa()) -> [proper_types:type()] .
- create_spec_args_types(MFA) ->
- 	% TODO: option support
- 	Opts = parse_opts([]) , 
-	% initialize state variables in process dictionary ('$size', '$left', etc..);
-	% initialize random number generator; start proper_typeserver
-  	global_state_init(Opts),
-	% lookup specs for MFA and synthesize proper types for the arguments
-	% FIXME: currently only the first clause of a many clause spec is processed,
-	% this will need more deep modifications in module proper_typeserver
-	ArgsTypes = proper_typeserver:create_spec_args_types(MFA) ,
-	% delete state variables in process dictionary; 
-	% erase random number generator seed, stop proper_typeserver
- 	global_state_erase(),
-	ArgsTypes.	
-
--spec create_specs_args_types(Module :: atom()) -> [{mfa(), [proper_types:type()]}] .
-create_specs_args_types(Module) -> 
- 	% TODO: option support
- 	Opts = parse_opts([]) , 
-	% initialize state variables in process dictionary ('$size', '$left', etc..);
-	% initialize random number generator; start proper_typeserver
-  	global_state_init(Opts),
-	% lookup specs for all the spec'ed functions in Module, and synthesize proper types for the arguments
-	% FIXME: currently only the first clause of a many clause spec is processed,
-	% this will need more deep modifications in module proper_typeserver
-	{ok, MFAs} = proper_typeserver:get_exp_specced(Module),
-	MfaArgsTypesList = [{MFA, proper_typeserver:create_spec_args_types(MFA)} || MFA <- MFAs], 
-	% delete state variables in process dictionary; 
-	% erase random number generator seed, stop proper_typeserver
- 	global_state_erase(),
-	MfaArgsTypesList .
-
-% TODO: when using it to generate covers, adding some size stuff in the line of the call to
-% global_state_reset(Opts) inside the body of proper:mfa_test/3, to increse the size of the generated
-% tests

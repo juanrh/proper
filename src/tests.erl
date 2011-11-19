@@ -140,14 +140,14 @@ h2(X, _Y, _Z) -> X .
 %{ok,[22,[7,2,4]]}
 
 % lo mas sorprendente es que es instantaneo: aunque los tipos q esta generando son muy sencillos
-% 28> io:fwrite("~p~n", [lists:map(fun(Size) -> element(2, proper_gen:pick(proper:create_spec_args_types({tests, h,2}), Size)) end, lists:seq(1, 100))]) .
+% 28> io:fwrite("~p~n", [lists:map(fun(Size) -> element(2, proper_gen:pick(proper_types:create_spec_args_types({tests, h,2}), Size)) end, lists:seq(1, 100))]) .
 % esto en cambio ya tarda unos cuantos segundos: se puede optimizar pq usar pick es muy rupestre
-% 37> io:fwrite("~p~n", [lists:map(fun(Size) -> element(2, proper_gen:pick(proper:create_spec_args_types({tests, append,1}), Size)) end, lists:seq(1, 100))]) .
+% 37> io:fwrite("~p~n", [lists:map(fun(Size) -> element(2, proper_gen:pick(proper_types:create_spec_args_types({tests, append,1}), Size)) end, lists:seq(1, 100))]) .
 
 % [{mfa(), [proper_types:type()]}] 
 %  proper:create_specs_args_types(tests) .
 test_cover_1() ->
-	MfaArgsTypesList = proper:create_specs_args_types(tests),
+	MfaArgsTypesList = proper_types:create_specs_args_types(tests),
     % TenTests = fun({{Mod, Fun, _Ar}, ArgsTypes}) -> apply(Mod, Fun, element(2, proper_gen:pick(ArgsTypes, 10))) end,
 	TenTests = fun({{Mod, Fun, Ar}, ArgsTypes}) -> 
 					R =  try apply(Mod, Fun, element(2, proper_gen:pick(ArgsTypes, 10))) 
