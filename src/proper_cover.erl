@@ -28,29 +28,36 @@
 -type success_exe_return() :: {success, {Input :: [term()], Output :: term()}} .
 -type exception_exe_return() :: {exception, {Input :: [term()], Reason :: term()}} .
 -type exe_return() :: {mfa(), success_exe_return() | exception_exe_return()} .
-% FIXME adapt to new interface in proper_types:create_specs_args_types(Module)
 -type cover_tests() :: [exe_return()] .
--spec create_cover_tests(Module :: atom()) ->{ok, cover_tests()} | {timeout, cover_tests()} .  
+-spec create_cover_tests(Module :: atom()) -> {ok, cover_tests()} | {error, term()} | {timeout, cover_tests()} .  
 create_cover_tests(Module) ->
 	% TODO: call Dialyzer first in order to get specs for all the functions
-	%cover_setup(Module),
+	cover_setup(Module),
 	% Setup ets table for execution results
 	ets:new(?EXE_RESULTS_ETS_NAME, [named_table]),
 	% gets the types for the arguments of the spec'ed functions in Module
-	MfaArgsTypesList = proper_types:create_specs_args_types(Module),
-	Self = self(), 
-	OffspringPids = 
-		lists:map(fun({MFA, ArgsTypes}) -> spawn(fun() -> try_input_types(Self, MFA, ArgsTypes) end) end, MfaArgsTypesList), 
-	TimeoutTriggered = create_cover_tests_loop(OffspringPids),
-	% TODO: create EUnit tests from here
-	Result = ets:tab2list(?EXE_RESULTS_ETS_NAME),
+	Result =
+	case proper_types:create_specs_args_types(Module) of
+		{error, _ReasonCE} = ErrorCE -> ErrorCE;
+		{ok, MfaArgsTypesList} -> 
+			Self = self(), 
+			OffspringPids = 
+				lists:map(fun({MFA, ArgsTypes}) -> 
+							spawn(fun() -> try_input_types(Self, MFA, ArgsTypes) end) 
+						  end, MfaArgsTypesList), 
+			TimeoutTriggered = create_cover_tests_loop(OffspringPids),
+			% TODO: create EUnit tests from here
+			OutputTests = ets:tab2list(?EXE_RESULTS_ETS_NAME), 
+			case TimeoutTriggered of
+				no_timeout -> {ok, OutputTests} ;
+				timeout -> {timeout, OutputTests}  
+			end 
+	end,
 	% Tear down ets table for execution results
 	ets:delete(?EXE_RESULTS_ETS_NAME),
-	%cover_report(Module), 
-	case TimeoutTriggered of
-		no_timeout -> {ok, Result} ;
-		timeout -> {timeout, Result}  
-	end .
+	% FIXME: currently just a "demo" report 
+	cover_report(Module),
+	Result.
 
 -spec create_cover_tests_loop(OffspringPids :: [pid()]) -> no_timeout | timeout .
 create_cover_tests_loop([]) -> no_timeout ;
@@ -102,7 +109,16 @@ try_input_types(From, {Mod, Fun, _Ar} = MFA, ArgsTypes) ->
 % A simpler error:
 % cover:start(), cover:compile_beam(tests), proper_types:create_spec_args_types({tests, g, 1}) .
 % while if we call cover:stop() then proper_types:create_spec_args_types({tests, g, 1})  works fine
-
+% The same errro in the main branch of PropEr (using that proper_types:create_spec_args_types/1 is)
+% a subset of proper:check_spec/1
+% proper:check_spec({tests, g, 1}). OK
+% cover:start(), cover:compile_beam(tests), proper:check_spec({tests, g, 1}). ERROR cant_load_code
+% with tests.erl with 
+% -compile(export_all) .
+% -spec g(0 | {'hola',_} | {'pepe',string()}) -> any().
+% g(0) -> 1 ;
+% g(2) -> 3;
+% g({pepe, X}) -> X .
 cover_setup(Module) ->
 	cover:start(),
 	% cover:compile_module(Module) .
@@ -118,14 +134,19 @@ cover_report(Module) ->
 	cover:stop(), 
 	io:fwrite("~n~n~n") .
 
-%%
-%% Local Functions
-%%
+%%-----------------------------------------------------------------------------
+%% Tests
+%%-----------------------------------------------------------------------------
+% needs to have the .erl in the same directory as the .beam until the problem with
+% the interaction between PropEr and Cover is solved
+% proper_cover:create_cover_tests(mylists) . (copy of standard lists module)
+%  gets between 25% and 31% of code coverage per module in one run with fixed size ?DEFAULT_SIZE
+%  very fast execution, but warnings from PropEr regarding garbage
 
-
-
-
-% TODO: when using it to generate covers, adding some size stuff in the line of the call to
+%%-----------------------------------------------------------------------------
+%% TODO
+%%-----------------------------------------------------------------------------
+% when using it to generate covers, adding some size stuff in the line of the call to
 % global_state_reset(Opts) inside the body of proper:mfa_test/3, to increse the size of the generated
 % tests
 
@@ -137,3 +158,4 @@ cover_report(Module) ->
 % proper_typeserver
 % - new clause in handle call
 % - added create_spec_args_types/1, create_spec_args_types/2
+% new module proper_aux

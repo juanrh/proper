@@ -145,7 +145,7 @@ h2(X, _Y, _Z) -> X .
 % 37> io:fwrite("~p~n", [lists:map(fun(Size) -> element(2, proper_gen:pick(proper_types:create_spec_args_types({tests, append,1}), Size)) end, lists:seq(1, 100))]) .
 
 % [{mfa(), [proper_types:type()]}] 
-%  proper:create_specs_args_types(tests) .
+%  proper_types:create_specs_args_types(tests) .
 test_cover_1() ->
 	MfaArgsTypesList = proper_types:create_specs_args_types(tests),
     % TenTests = fun({{Mod, Fun, _Ar}, ArgsTypes}) -> apply(Mod, Fun, element(2, proper_gen:pick(ArgsTypes, 10))) end,
