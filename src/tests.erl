@@ -195,3 +195,6 @@ test_cover_1() ->
 % ok
 
 % proper_cover:create_cover_tests(tests) .
+% 5> proper_cover:create_cover_tests(lists) . 
+% works quickly but lots of warnings from proper
+% WARNING: Some garbage has been left in the proce

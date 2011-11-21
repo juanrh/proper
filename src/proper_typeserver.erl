@@ -2315,25 +2315,27 @@ same_rec_fun(RecFun1, RecFun2, NumRecArgs) ->
 %% Test coverage generation 
 %%-----------------------------------------------------------------------------
 
--spec create_spec_args_types(mfa()) -> [proper_types:type()] .
+-spec create_spec_args_types(mfa()) -> {ok, [proper_types:type()]} | {error, term()} .
 create_spec_args_types(MFA) -> 
 	% just pass the call to proper_typeserver in order to hace access to 
 	% its state, which is needed in the translation process from native
 	% to PropEr types
     TypeserverPid = get('$typeserver_pid'),
-	% TODO: error handling
-    {ok,ArgTypes} = gen_server:call(TypeserverPid, {create_spec_args_types,MFA}),
-	% io:fwrite("ArgsTypes = < ~p >~n~n", [ArgTypes]),
-	ArgTypes .
+	gen_server:call(TypeserverPid, {create_spec_args_types,MFA}). 
 
 -spec create_spec_args_types(mfa(), state()) ->
 	{ok, [proper_types:type()], state()} | {error, term()} .
 create_spec_args_types(MFA, State) -> 
-	% TODO: error handling
 	% get the specs for the module, as {Domain,Range} = FunRepr
- 	{ok,FunRepr,NewState} = get_exp_spec(MFA, State),
-	{Mod,_Fun,_Arity} = MFA, {Domain,_Range} = FunRepr,
-	% TODO: error handling
-	% convert from native erlang types into PropEr types
-	{ok,ArgTypes,NewState2} = convert(Mod, {type,0,'$fixed_list',Domain}, NewState),
-	{ok,ArgTypes,NewState2} .
+	case get_exp_spec(MFA, State) of
+		{ok,FunRepr,NewState} -> 
+			{Mod,_Fun,_Arity} = MFA, {Domain,_Range} = FunRepr,
+			% convert from native erlang types into PropEr types
+			case convert(Mod, {type,0,'$fixed_list',Domain}, NewState) of
+				 {ok,_ArgTypes,_NewState2} = OKConversion -> OKConversion ;
+				 {error,_ReasonConv} = ErrorConversion -> ErrorConversion
+	    	end ;
+		{error,_ReasonGetSpecs} = ErrorGetSpecs ->
+	    	ErrorGetSpecs
+	end .
+	

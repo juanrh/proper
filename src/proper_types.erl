@@ -1226,30 +1226,61 @@ parameter(Parameter) ->
 %-spec create_spec_args_types({function, mfa()} | {module, atom()}) 
 %	-> [proper_types:type()] | [{mfa(), [proper_types:type()]}] . 
 % instead of two functions, but let us leave that details for latter
--spec create_spec_args_types(mfa()) -> [proper_types:type()] .
+
+-spec create_spec_args_types(mfa()) -> {ok, [proper_types:type()]} | {error, term()} .
  create_spec_args_types(MFA) ->
 	% initialize random number generator; start proper_typeserver
 	proper_arith:rand_start(), proper_typeserver:start(),
 	% lookup specs for MFA and synthesize proper types for the arguments
 	% FIXME: currently only the first clause of a many clause spec is processed,
 	% this will need more deep modifications in module proper_typeserverç
-	% TODO: error handling
-	ArgsTypes = proper_typeserver:create_spec_args_types(MFA) ,
+	Result = proper_typeserver:create_spec_args_types(MFA), 
 	% erase random number generator seed, stop proper_typeserver
 	proper_typeserver:stop(), proper_arith:rand_stop(),
-	ArgsTypes.	
+	Result .
 
--spec create_specs_args_types(Module :: atom()) -> [{mfa(), [proper_types:type()]}] .
-create_specs_args_types(Module) -> 
+% TODO: this design is too complicated, unwrap the inner maybe
+-spec create_specs_args_types(Module :: atom()) ->
+	maybe([{mfa(), maybe([proper_types:type()])}]) .
+ create_specs_args_types(Module) -> 
+	% FIXME: currently not compatible with the new interface for proper_typeserver:get_exp_specced/1
+	% extended with error handling
 	% initialize random number generator; start proper_typeserver
 	proper_arith:rand_start(), proper_typeserver:start(),
 	% lookup specs for all the spec'ed functions in Module, and synthesize proper types for the arguments
 	% FIXME: currently only the first clause of a many clause spec is processed,
 	% this will need more deep modifications in module proper_typeserver
 	% TODO: error handling
-	{ok, MFAs} = proper_typeserver:get_exp_specced(Module),
-	% TODO: error handling
-	MfaArgsTypesList = [{MFA, proper_typeserver:create_spec_args_types(MFA)} || MFA <- MFAs], 
+	Result = case proper_typeserver:get_exp_specced(Module) of
+				{ok, MFAs} -> 
+					CreateArgsMFA = fun(MFA) -> 
+										case proper_typeserver:create_spec_args_types(MFA) of
+											{ok, _MfaArgsTypes} = OkRes -> {true, OkRes};
+											{error, _ReasonCE} = ErrorResCE -> {false, ErrorResCE}
+										end
+									end,
+					{ok, mapWhile(CreateArgsMFA, MFAs)};
+				{error, _ReasonGE} = ErrorGetSpecs -> ErrorGetSpecs
+			end,
 	% erase random number generator seed, stop proper_typeserver
 	proper_typeserver:stop(), proper_arith:rand_stop(),
-	MfaArgsTypesList .
+	Result . 
+
+% TODO: move to some library module
+% more standard idiom for the types rich_result/1 and rich_result/2 from proper_typeserver
+% similar to Haskell's Maybe type constructor, but using Erlang usual atoms.
+% Haskell's Maybe module could be adapted to Erlang using this idiom
+-type maybe(T) :: {ok,T} | {error,term()} . % the term() associated to error is the descripction
+-type maybe_state(T,S) :: {ok,T,S} | {error,term()} .
+% Note the first element that doesn't pass the tests is also included in the returning list!
+-spec mapWhile(F:: fun((A) -> {boolean(), B}), Xs :: [A]) -> Ys :: [B] when A :: term(), B :: term() .
+mapWhile(_F, []) -> [] ;
+mapWhile(F, [X | Xs]) ->
+	{Continue, ResX}  = F(X),
+ 	case Continue of
+		true -> [ResX | mapWhile(F, Xs)];
+		_ -> [ResX]
+	end .
+
+
+ 

@@ -28,8 +28,8 @@
 -type success_exe_return() :: {success, {Input :: [term()], Output :: term()}} .
 -type exception_exe_return() :: {exception, {Input :: [term()], Reason :: term()}} .
 -type exe_return() :: {mfa(), success_exe_return() | exception_exe_return()} .
-% FIXME
--type cover_tests() :: [{mfa(), exe_return()}] .
+% FIXME adapt to new interface in proper_types:create_specs_args_types(Module)
+-type cover_tests() :: [exe_return()] .
 -spec create_cover_tests(Module :: atom()) ->{ok, cover_tests()} | {timeout, cover_tests()} .  
 create_cover_tests(Module) ->
 	% TODO: call Dialyzer first in order to get specs for all the functions
@@ -97,7 +97,12 @@ try_input_types(From, {Mod, Fun, _Ar} = MFA, ArgsTypes) ->
 % already reported in http://osdir.com/ml/erlang-questions-programming/2011-06/msg00627.html  
 % "PropEr relies on the source if the beam file cannot be found (it can't when it's cover compiled), 
 % and it doesn't seem to know about ERL_LIBS or the include paths used. Especially since rebar copies 
-% the source file to the .eunit folder, it's harder for PropEr to detect linked source files." 
+% the source file to the .eunit folder, it's harder for PropEr to detect linked source files."
+% 
+% A simpler error:
+% cover:start(), cover:compile_beam(tests), proper_types:create_spec_args_types({tests, g, 1}) .
+% while if we call cover:stop() then proper_types:create_spec_args_types({tests, g, 1})  works fine
+
 cover_setup(Module) ->
 	cover:start(),
 	% cover:compile_module(Module) .
