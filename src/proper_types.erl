@@ -1239,8 +1239,12 @@ parameter(Parameter) ->
 	proper_typeserver:stop(), proper_arith:rand_stop(),
 	Result .
 
+% For the returning type:
+%	- outer maybe for errors finding the spec'ed MFAs
+% 	- inner maybe for concrete MFAs that have at least one argument for which PropEr cannot
+% 	generate values, e.g., pid()
 -spec create_specs_args_types(Module :: atom()) ->
-	proper_aux:maybe([{mfa(), [proper_types:type()]}]) .
+	proper_aux:maybe([{mfa(), proper_aux:maybe([proper_types:type()])}]) .
  create_specs_args_types(Module) -> 
 	% initialize random number generator; start proper_typeserver
 	proper_arith:rand_start(), proper_typeserver:start(),
@@ -1248,16 +1252,11 @@ parameter(Parameter) ->
 	% FIXME: currently only the first clause of a many clause spec is processed,
 	% this will need more deep modifications in module proper_typeserver
 	Result = case proper_typeserver:get_exp_specced(Module) of
-				{ok, MFAs} -> 
-					MaybeGetArgsTypes = 
-						fun(MFA) -> proper_aux:m_bind(proper_typeserver:create_spec_args_types(MFA),
-										  fun(ArgsTypes) -> {ok, {MFA, ArgsTypes}} end) 
-						end,
-					proper_aux:maybe_map(MaybeGetArgsTypes, MFAs);
+				{ok, MFAs} ->
+					{ok, lists:map(fun (MFA) -> {MFA, create_spec_args_types(MFA)} end, MFAs)};
 				{error, _ReasonGE} = ErrorGetSpecs -> 
 					ErrorGetSpecs
 			end,
 	% erase random number generator seed, stop proper_typeserver
 	proper_typeserver:stop(), proper_arith:rand_stop(),
 	Result . 
- 

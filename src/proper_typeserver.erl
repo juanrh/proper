@@ -2315,7 +2315,8 @@ same_rec_fun(RecFun1, RecFun2, NumRecArgs) ->
 %% Test coverage generation 
 %%-----------------------------------------------------------------------------
 
--spec create_spec_args_types(mfa()) -> {ok, [proper_types:type()]} | {error, term()} .
+% -spec create_spec_args_types(mfa()) -> {ok, [proper_types:type()]} | {error, term()} .
+-spec create_spec_args_types(mfa()) -> proper_aux:maybe([proper_types:type()]) .
 create_spec_args_types(MFA) -> 
 	% just pass the call to proper_typeserver in order to hace access to 
 	% its state, which is needed in the translation process from native
@@ -2324,7 +2325,8 @@ create_spec_args_types(MFA) ->
 	gen_server:call(TypeserverPid, {create_spec_args_types,MFA}). 
 
 -spec create_spec_args_types(mfa(), state()) ->
-	{ok, [proper_types:type()], state()} | {error, term()} .
+%	{ok, [proper_types:type()], state()} | {error, term()} .
+	proper_aux:maybe_state([proper_types:type()]) .
 create_spec_args_types(MFA, State) -> 
 	% get the specs for the module, as {Domain,Range} = FunRepr
 	case get_exp_spec(MFA, State) of

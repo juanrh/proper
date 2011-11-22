@@ -29,6 +29,10 @@
 -type exception_exe_return() :: {exception, {Input :: [term()], Reason :: term()}} .
 -type exe_return() :: {mfa(), success_exe_return() | exception_exe_return()} .
 -type cover_tests() :: [exe_return()] .
+% TODO: modify proper_types:create_specs_args_types to the new type so mfa's for which PropEr
+% cannot generate types are ignored
+% TODO: add parameters and an iteration to generate more tests until the specified delta for the
+% coverage is reached, or until a maximum number of iterations is reached
 -spec create_cover_tests(Module :: atom()) -> {ok, cover_tests()} | {error, term()} | {timeout, cover_tests()} .  
 create_cover_tests(Module) ->
 	% TODO: call Dialyzer first in order to get specs for all the functions
@@ -36,10 +40,21 @@ create_cover_tests(Module) ->
 	% Setup ets table for execution results
 	ets:new(?EXE_RESULTS_ETS_NAME, [named_table]),
 	% gets the types for the arguments of the spec'ed functions in Module
+	io:fwrite(", 1"),
 	Result =
+	% slow performance from here, but proper_types:create_specs_args_types(lists) is fast!
+	% performance problems started when introducing inner maybes to avoid types not generable
+	% TODO: do the maybe distinction inside child process to avoid filter_map/3 below
 	case proper_types:create_specs_args_types(Module) of
 		{error, _ReasonCE} = ErrorCE -> ErrorCE;
-		{ok, MfaArgsTypesList} -> 
+		{ok, MfaMaybeArgsTypesList} ->
+			io:fwrite(", 2"),
+			MfaArgsTypesList 
+				= proper_aux:filter_map(fun({_, MATs}) -> proper_aux:is_ok(MATs) end,
+										fun({MFA, OkATs}) -> {MFA, proper_aux:from_ok(OkATs)} end,
+										MfaMaybeArgsTypesList),  
+			%io:fwrite("MfaArgsTypesList: ~p", [MfaArgsTypesList]),
+			io:fwrite(", 3"),
 			Self = self(), 
 			OffspringPids = 
 				lists:map(fun({MFA, ArgsTypes}) -> 
@@ -57,14 +72,17 @@ create_cover_tests(Module) ->
 	ets:delete(?EXE_RESULTS_ETS_NAME),
 	% FIXME: currently just a "demo" report 
 	cover_report(Module),
-	Result.
+	ok . %FIXME
+	%Result.
 
 -spec create_cover_tests_loop(OffspringPids :: [pid()]) -> no_timeout | timeout .
 create_cover_tests_loop([]) -> no_timeout ;
 create_cover_tests_loop(OffspringPids) -> 
 	receive
-		{Pid, {MfaExecuted, ExeResult}} -> ets:insert(?EXE_RESULTS_ETS_NAME, {MfaExecuted, ExeResult}),
-		create_cover_tests_loop(lists:delete(Pid, OffspringPids))
+		{Pid, {MfaExecuted, ExeResult}} ->
+			io:fwrite("- "), 
+			ets:insert(?EXE_RESULTS_ETS_NAME, {MfaExecuted, ExeResult}),
+			create_cover_tests_loop(lists:delete(Pid, OffspringPids))
 	after
 		?DEFAULT_TIMEOUT ->
 			% kill remaining processes
@@ -76,6 +94,7 @@ create_cover_tests_loop(OffspringPids) ->
 	% type of the returning message sent to the caller
 	%  {mfa, {success, {Input :: [term()], Output :: term()}} | {exception, {Input :: [term()], Reason :: term()}}} .
 try_input_types(From, {Mod, Fun, _Ar} = MFA, ArgsTypes) ->
+	io:fwrite("+ "),
 	% TODO: error handling in proper_gen, replacing proper_gen:pick/2 to inprove performance, handling size of generated input
 	{ok, SampleInput} = proper_gen:pick(ArgsTypes, ?DEFAULT_SIZE),
 	ExeResult = try {MFA, {success, {SampleInput, apply(Mod, Fun, SampleInput)}}} 
@@ -130,13 +149,16 @@ cover_report(Module) ->
 	% FIXME
 	io:fwrite("~n~nCover stats:~n"),
 	io:fwrite("module stats: ~p", [cover:analyse(Module, coverage, module)]),
-	io:fwrite("~nfunction stats: ~p", [cover:analyse(Module, coverage, function)]),
+	% io:fwrite("~nfunction stats: ~p", [cover:analyse(Module, coverage, function)]),
 	cover:stop(), 
-	io:fwrite("~n~n~n") .
+	io:fwrite("~n~n") .
 
 %%-----------------------------------------------------------------------------
 %% Tests
 %%-----------------------------------------------------------------------------
+% proper_types:create_specs_args_types(testsl) . 
+% proper_types:create_specs_args_types(tests) .
+%
 % needs to have the .erl in the same directory as the .beam until the problem with
 % the interaction between PropEr and Cover is solved
 % proper_cover:create_cover_tests(mylists) . (copy of standard lists module)

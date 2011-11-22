@@ -39,6 +39,9 @@ g3(0) -> 1 ;
 g3(1) -> 0 .
 % g3(1) -> 2 . % esta clausula da error de salida fuera de la spec
 
+-spec no_gen(pid()) -> boolean() .
+no_gen(Pid) when is_pid(Pid) -> true .
+
 -spec h(integer(), [integer()]) -> ok | {bad, string()} .
 h(0, _) -> ok ;
 h(X, Xs) -> case length(Xs) > X of
