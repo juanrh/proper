@@ -36,7 +36,7 @@
 -spec create_cover_tests(Module :: atom()) -> {ok, cover_tests()} | {error, term()} | {timeout, cover_tests()} .  
 create_cover_tests(Module) ->
 	% TODO: call Dialyzer first in order to get specs for all the functions
-	cover_setup(Module),
+	cover_setup(Module), % FIXME
 	% Setup ets table for execution results
 	ets:new(?EXE_RESULTS_ETS_NAME, [named_table]),
 	% gets the types for the arguments of the spec'ed functions in Module
@@ -44,7 +44,18 @@ create_cover_tests(Module) ->
 	Result =
 	% slow performance from here, but proper_types:create_specs_args_types(lists) is fast!
 	% performance problems started when introducing inner maybes to avoid types not generable
-	% TODO: do the maybe distinction inside child process to avoid filter_map/3 below
+	% TODO: do the maybe distinction inside child process to avoid filter_map/3 below.
+	% What it is clear is that MfaMaybeArgsTypesList and MfaArgsTypesList are very big for
+	% real modules like lists, maybe only the MFA should be passed to the child processes so
+	% they would call to proper_types in order to get the types ==> less data copied
+	% BUT: although that would be nice the performance problem dissapears when cover is not activated
+	% SEE: http://www.erlang.org/doc/apps/tools/cover_chapter.html
+	% 1.3  Miscellaneous Performance Execution of code in Cover compiled modules is slower and more memory
+	% consuming than for regularly compiled modules. As the Cover database contains information about each 
+	% executable line in each Cover compiled module, performance decreases proportionally to the size and
+ 	% number of the Cover compiled modules. To improve performance when analysing cover results it is possible
+	% to do multiple calls to analyse and analyse_to_file at once. You can also use the async_analyse_to_file 
+	% convenience function.
 	case proper_types:create_specs_args_types(Module) of
 		{error, _ReasonCE} = ErrorCE -> ErrorCE;
 		{ok, MfaMaybeArgsTypesList} ->
@@ -70,8 +81,8 @@ create_cover_tests(Module) ->
 	end,
 	% Tear down ets table for execution results
 	ets:delete(?EXE_RESULTS_ETS_NAME),
-	% FIXME: currently just a "demo" report 
-	cover_report(Module),
+	% TODO: currently just a "demo" report 
+	cover_report(Module), %FIXME
 	ok . %FIXME
 	%Result.
 
